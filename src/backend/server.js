@@ -12,7 +12,7 @@ app.use(express.json());
 // Routes
 app.use('/api/deliveries', deliveriesRouter);
 
-// Connect to MongoDB
+// Connected to MongoDB
 mongoose.connect('mongodb://localhost:27017/medicineDelivery', {
   useNewUrlParser: true,
   useUnifiedTopology: true,
