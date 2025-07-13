@@ -56,13 +56,13 @@ function App() {
       let res, data;
       if (editIndex !== null) {
         const deliveryId = rows[editIndex]._id;
-        res = await fetch(`http://localhost:5000/api/deliveries/${deliveryId}`, {
+        res = await fetch(`http://192.168.31.64:5000/api/deliveries/${deliveryId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(newEntry),
         });
       } else {
-        res = await fetch("http://localhost:5000/api/deliveries", {
+        res = await fetch("http://192.168.31.64:5000/api/deliveries", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(newEntry),
@@ -127,7 +127,7 @@ function App() {
     const deliveryId = rows[deletePopupIndex]._id;
 
     try {
-      const res = await fetch(`http://localhost:5000/api/deliveries/${deliveryId}`, {
+      const res = await fetch(`http://192.168.31.64:5000/api/deliveries/${deliveryId}`, {
         method: "DELETE",
       });
 
@@ -228,7 +228,9 @@ function App() {
                   onClick={() => confirmPaymentPopup(index)}
                 >
                   <div
-                    className={`w-3 h-3 rounded-full mr-2 ${row.payment === "Paid" ? "bg-green-500" : "bg-red-500"}`}
+                    className={`w-3 h-3 rounded-full mr-2 ${
+                      row.payment === "Paid" ? "bg-green-500" : "bg-red-500"
+                    }`}
                     title={row.payment}
                   />
                   <span>{row.payment || "Unpaid"}</span>
@@ -289,7 +291,9 @@ function App() {
                     className="w-full border px-2 py-1 rounded"
                   >
                     {buildingOptions.map((name) => (
-                      <option key={name} value={name}>{name}</option>
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -301,7 +305,9 @@ function App() {
                     className="w-full border px-2 py-1 rounded"
                   >
                     {flatOptions.map((flat) => (
-                      <option key={flat} value={flat}>{flat}</option>
+                      <option key={flat} value={flat}>
+                        {flat}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -318,8 +324,21 @@ function App() {
                 </div>
               </div>
               <div className="flex justify-center gap-4">
-                <button onClick={confirmAddRow} className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Save</button>
-                <button onClick={() => { setShowPopup(false); setEditIndex(null); }} className="bg-gray-300 px-4 py-2 rounded hover:bg-gray-400">Cancel</button>
+                <button
+                  onClick={confirmAddRow}
+                  className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={() => {
+                    setShowPopup(false);
+                    setEditIndex(null);
+                  }}
+                  className="bg-gray-300 px-4 py-2 rounded hover:bg-gray-400"
+                >
+                  Cancel
+                </button>
               </div>
             </div>
           </div>
