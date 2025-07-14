@@ -1,9 +1,10 @@
+// routes/deliveries.js
 import express from 'express';
-import Delivery from '../models/delivery.js'; 
+import Delivery from '../models/delivery.js';
 
 const router = express.Router();
 
-// POST: Create a new delivery
+// POST: Create new delivery
 router.post('/', async (req, res) => {
   try {
     const delivery = new Delivery(req.body);
@@ -24,37 +25,44 @@ router.get('/', async (req, res) => {
   }
 });
 
-// PUT: Update a delivery by ID
+// PUT: Update delivery
 router.put('/:id', async (req, res) => {
   try {
     const updated = await Delivery.findByIdAndUpdate(
       req.params.id,
-      { $set: req.body }, 
-      { new: true, runValidators: true } 
+      { $set: req.body },
+      { new: true, runValidators: true }
     );
-
-    if (!updated) {
-      return res.status(404).json({ message: 'Delivery not found' });
-    }
-
+    if (!updated) return res.status(404).json({ message: 'Delivery not found' });
     res.status(200).json({ message: 'Delivery updated successfully', data: updated });
   } catch (error) {
     res.status(400).json({ message: 'Failed to update delivery', error: error.message });
   }
 });
 
-// DELETE: Delete a delivery by ID
+// DELETE: Remove delivery
 router.delete('/:id', async (req, res) => {
   try {
     const deleted = await Delivery.findByIdAndDelete(req.params.id);
-
-    if (!deleted) {
-      return res.status(404).json({ message: 'Delivery not found' });
-    }
-
+    if (!deleted) return res.status(404).json({ message: 'Delivery not found' });
     res.status(200).json({ message: 'Delivery deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Failed to delete delivery', error: error.message });
+  }
+});
+
+// PATCH: Update only paymentStatus
+router.patch('/:id/payment', async (req, res) => {
+  try {
+    const updated = await Delivery.findByIdAndUpdate(
+      req.params.id,
+      { $set: { paymentStatus: req.body.paymentStatus } },
+      { new: true }
+    );
+    if (!updated) return res.status(404).json({ message: 'Delivery not found' });
+    res.status(200).json({ data: updated });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
   }
 });
 
