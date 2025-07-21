@@ -1,278 +1,292 @@
 import React, { useState, useEffect } from "react";
 import { Pencil, Trash2 } from "lucide-react";
+import DeliveryTimer from "./DeliveryTimer";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+const BASE_URL = "http://localhost:5000";
 
-const buildingOptions = ["All", "Requizza", "Hydra", "Hercules", "Firenza", "Brichwood"];
-const flatOptions = ["101", "102", "103", "201", "202", "203"];
-
-const dummyFlatIds = {
-  "101": "686bd2e41c842f180f0aba30",
-  "102": "686bd2e41c842f180f0aba31",
-  "103": "686bd2e41c842f180f0aba32",
-  "201": "686bd2e41c842f180f0aba33",
-  "202": "686bd2e41c842f180f0aba34",
-  "203": "686bd2e41c842f180f0aba35",
+const buildingOptions = ["All", "Requizza", "Hydra", "Hercules", "Firenze", "Brichwood"];
+const flatNumbersMap = {
+  Requizza: ["101", "102", "103"],
+  Hydra: ["201", "202", "203"],
+  Hercules: ["301", "302", "303"],
+  Firenze: ["401", "402", "403"],
+  Brichwood: ["501", "502", "503"],
 };
 
-function App() {
-  const today = new Date().toISOString().split("T")[0];
+const App = () => {
   const [rows, setRows] = useState([]);
-  const [deliveryDate, setDeliveryDate] = useState(today);
+  const [filteredRows, setFilteredRows] = useState([]);
   const [selectedBuilding, setSelectedBuilding] = useState("All");
-  const [popupFlat, setPopupFlat] = useState("101");
-  const [popupAmount, setPopupAmount] = useState("");
-  const [showPopup, setShowPopup] = useState(false);
-  const [editIndex, setEditIndex] = useState(null);
-  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
-  const [confirmPaymentIndex, setConfirmPaymentIndex] = useState(null);
-  const [paymentSelection, setPaymentSelection] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [showAddPopup, setShowAddPopup] = useState(false);
+  const [newEntry, setNewEntry] = useState({
+    building: "Requizza",
+    flatNumber: "",
+    amount: "",
+    deliveryStatus: "Delivered"
+  });
+  const [showPaymentPopup, setShowPaymentPopup] = useState(false);
+  const [selectedPaymentRow, setSelectedPaymentRow] = useState(null);
+  const [editId, setEditId] = useState(null);
+
+  const rowsPerPage = 10;
+
+  const fetchDeliveries = async () => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/deliveries`);
+      const data = await response.json();
+      setRows(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Error fetching deliveries:", error);
+    }
+  };
 
   useEffect(() => {
     fetchDeliveries();
   }, []);
 
-  const fetchDeliveries = async () => {
-    try {
-      const res = await fetch(`${BASE_URL}/api/deliveries`);
-      const data = await res.json();
-      setRows(data);
-    } catch (err) {
-      console.error("Failed to fetch deliveries:", err);
-    }
-  };
+  useEffect(() => {
+    const filtered = rows.filter((row) => {
+      const matchesBuilding = selectedBuilding === "All" || row.building === selectedBuilding;
+      const createdDate = new Date(row.createdAt || row.deliveryTime).toISOString().split("T")[0];
+      const matchesDate = selectedDate === createdDate;
+      return matchesBuilding && matchesDate;
+    });
+    setFilteredRows(filtered);
+    setCurrentPage(1);
+  }, [rows, selectedBuilding, selectedDate]);
 
-  const confirmAddRow = async () => {
-    if (!popupAmount.trim()) return alert("Amount is required");
+  const handleAddDelivery = async () => {
+    const { building, flatNumber, amount, deliveryStatus } = newEntry;
+    if (!building || building === "Select") return toast.error("Please select a building");
+    if (!flatNumber || flatNumber === "Select") return toast.error("Please select a flat number");
 
-    const newEntry = {
-      building: selectedBuilding,
-      flat: popupFlat,
-      amount: Number(popupAmount),
-      status: "OutForDelivery",
-      paymentStatus: "Unpaid",
-      receivedBy: "NotYetReceived",
-      deliveryDate: new Date(deliveryDate).toISOString(),
-      deliveryTime: new Date().toISOString(),
-      deliveryPerson: "Pending",
-      deliveredBy: "Pending",
-      deliveryType: "Package",
-      flatId: dummyFlatIds[popupFlat],
+    const payload = {
+      building,
+      flatNumber,
+      amount,
+      deliveryStatus,
+      deliveryTime: new Date(),
+      paymentStatus: "Unpaid"
     };
 
     try {
-      const url = editIndex !== null
-        ? `${BASE_URL}/api/deliveries/${rows[editIndex]._id}`
-        : `${BASE_URL}/api/deliveries`;
-
-      const method = editIndex !== null ? "PUT" : "POST";
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newEntry),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        console.error("API error:", data);
-        return alert(data.error || "Failed to save delivery");
-      }
-
-      const updatedRows = [...rows];
-      if (editIndex !== null) {
-        updatedRows[editIndex] = data.data || data;
+      if (editId) {
+        await fetch(`${BASE_URL}/api/deliveries/${editId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        toast.success("Delivery updated successfully");
+        fetchDeliveries();
       } else {
-        updatedRows.push(data.data || data);
+        const response = await fetch(`${BASE_URL}/api/deliveries`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const result = await response.json();
+        setRows([...rows, result]);
+        toast.success("Delivery added successfully");
       }
 
-      setRows(updatedRows);
-      resetPopup();
+      setShowAddPopup(false);
+      setEditId(null);
+      setNewEntry({ building: "Requizza", flatNumber: "", amount: "", deliveryStatus: "Delivered" });
     } catch (err) {
-      console.error("Server error:", err);
-      alert("Error while saving delivery");
+      console.error("Error saving delivery:", err);
+      toast.error("Error saving delivery");
     }
   };
 
-  const resetPopup = () => {
-    setShowPopup(false);
-    setEditIndex(null);
-    setPopupAmount("");
-    setPopupFlat("101");
-    setSelectedBuilding("All");
-    setShowSuccessMessage(true);
-    setTimeout(() => setShowSuccessMessage(false), 3000);
+  const updatePaymentStatus = async (id, status) => {
+    try {
+      await fetch(`${BASE_URL}/api/deliveries/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentStatus: status }),
+      });
+      toast.success("Payment status updated");
+      fetchDeliveries();
+      setShowPaymentPopup(false);
+    } catch (error) {
+      console.error("Error updating payment status:", error);
+      toast.error("Failed to update payment status");
+    }
   };
 
-  const confirmPaymentStatus = async () => {
-    if (confirmPaymentIndex === null || !paymentSelection) return;
-
-    const target = rows[confirmPaymentIndex];
+  const handleDeleteDelivery = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this delivery?")) return;
     try {
-      const res = await fetch(`${BASE_URL}/api/deliveries/${target._id}/payment`, {
-        method: "PATCH",
+      await fetch(`${BASE_URL}/api/deliveries/${id}`, { method: "DELETE" });
+      setRows((prev) => prev.filter((r) => r._id !== id));
+      toast.success("Delivery deleted successfully");
+    } catch (err) {
+      console.error("Delete failed:", err);
+      toast.error("Failed to delete delivery");
+    }
+  };
+
+  const handleStatusChange = async (id, newStatus) => {
+    try {
+      const payload = { deliveryStatus: newStatus };
+      if (newStatus === "Out for Delivery") {
+        payload.deliveryTime = new Date().toISOString();
+      }
+
+      const response = await fetch(`${BASE_URL}/api/deliveries/${id}`, {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paymentStatus: paymentSelection }),
+        body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        return alert(data.error || "Failed to update payment status");
+      if (response.ok) {
+        toast.success("Delivery status updated");
+        fetchDeliveries();
+      } else {
+        toast.error("Failed to update status");
       }
-
-      const updated = [...rows];
-      updated[confirmPaymentIndex] = data.data || data;
-
-      setRows(updated);
-      setConfirmPaymentIndex(null);
-      setPaymentSelection(null);
-      setShowSuccessMessage(true);
-      setTimeout(() => setShowSuccessMessage(false), 3000);
-    } catch (err) {
-      console.error("Payment update error:", err);
-      alert("Error updating payment status");
+    } catch (error) {
+      console.error("Error updating status:", error);
+      toast.error("Error updating status");
     }
   };
 
-  const openPaymentPopup = (index) => {
-    setConfirmPaymentIndex(index);
-    setPaymentSelection(rows[index].paymentStatus || "Unpaid");
-  };
+  const paginatedRows = filteredRows.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+  const totalPages = Math.ceil(filteredRows.length / rowsPerPage);
+  const formatCurrency = (amount) => `₹${amount}`;
+  const formatTime = (time) => new Date(time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
   return (
-    <div className="min-h-screen bg-gray-100 p-2 sm:p-6 relative">
-      {showSuccessMessage && (
-        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-4 py-2 rounded shadow-lg z-50">
-          Saved Successfully
-        </div>
-      )}
+    <div className="min-h-screen bg-gray-100 p-6">
+      <ToastContainer />
+      <h1 className="text-2xl font-bold text-center mb-6">B STAR PHARMA</h1>
 
-      <div className="max-w-5xl mx-auto bg-white rounded-lg shadow-md p-4 sm:p-6">
-        <h1 className="text-2xl sm:text-3xl font-bold mb-4 text-center">B STAR PHARMA</h1>
+      <div className="flex flex-wrap items-center justify-between mb-4 gap-4">
+        <button className="bg-blue-600 text-white px-4 py-2 rounded" onClick={() => { setShowAddPopup(true); setEditId(null); }}>
+          Add
+        </button>
 
-        <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-2">
-          <button onClick={() => setShowPopup(true)} className="bg-blue-500 text-white text-sm px-4 py-2 rounded hover:bg-blue-600 w-full sm:w-auto">
-            Add
-          </button>
-          <input
-            type="date"
-            value={deliveryDate}
-            onChange={(e) => setDeliveryDate(e.target.value)}
-            className="border rounded px-3 py-2 w-full sm:w-auto"
-          />
-        </div>
-
-        <div className="flex flex-wrap justify-center gap-2 mb-6">
+        <div className="flex gap-2 overflow-x-auto">
           {buildingOptions.map((b) => (
-            <button
-              key={b}
-              onClick={() => setSelectedBuilding(b)}
-              className={`px-3 py-1 rounded-full text-xs sm:text-sm border ${
-                selectedBuilding === b ? "bg-blue-200 font-bold" : "bg-gray-100"
-              }`}
-            >
+            <button key={b} className={`px-3 py-1 rounded-full border ${selectedBuilding === b ? "bg-blue-100 text-blue-700" : "bg-white"}`} onClick={() => setSelectedBuilding(b)}>
               {b}
             </button>
           ))}
         </div>
 
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-4 px-2 sm:px-4 font-semibold text-xs sm:text-sm text-gray-700">
-            <p>Actions</p>
-            <p>Building</p>
-            <p>Flat</p>
-            <p>Amount</p>
-            <p>Status</p>
-            <p>Payment</p>
-          </div>
-
-          {rows
-            .filter((r) => selectedBuilding === "All" || r.building === selectedBuilding)
-            .map((r, i) => (
-              <div key={r._id || i} className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-4 items-center p-2 sm:p-4 border rounded bg-gray-50 text-xs sm:text-sm">
-                <div className="flex gap-2">
-                  <button onClick={() => setEditIndex(i) || setShowPopup(true)} className="text-blue-500">
-                    <Pencil size={16} />
-                  </button>
-                  <button className="text-red-500">
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-                <p>{r.building}</p>
-                <p>{r.flat}</p>
-                <p>₹{r.amount}</p>
-                <p>{r.status}</p>
-                <div onClick={() => openPaymentPopup(i)} className="flex items-center gap-2 cursor-pointer">
-                  <span className={`w-3 h-3 rounded-full ${r.paymentStatus === "Paid" ? "bg-green-500" : "bg-red-500"}`} />
-                  {r.paymentStatus}
-                </div>
-              </div>
-            ))}
-        </div>
+        <input type="date" className="px-3 py-2 border rounded" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
       </div>
 
-      {/* POPUPS */}
-      {showPopup && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 px-2">
-          <div className="bg-white p-4 sm:p-6 rounded shadow-md w-full max-w-sm">
-            <h2 className="text-lg font-semibold mb-4 text-center">{editIndex !== null ? "Edit" : "Add"} Delivery</h2>
-            <div className="space-y-4">
-              <select value={selectedBuilding} onChange={(e) => setSelectedBuilding(e.target.value)} className="w-full border px-2 py-1 rounded">
-                {buildingOptions.filter((b) => b !== "All").map((b) => (
-                  <option key={b}>{b}</option>
-                ))}
-              </select>
-              <select value={popupFlat} onChange={(e) => setPopupFlat(e.target.value)} className="w-full border px-2 py-1 rounded">
-                {flatOptions.map((f) => (
-                  <option key={f}>{f}</option>
-                ))}
-              </select>
-              <input
-                type="number"
-                placeholder="₹"
-                value={popupAmount}
-                onChange={(e) => setPopupAmount(e.target.value)}
-                className="w-full border px-2 py-1 rounded"
-              />
-              <div className="flex justify-center gap-4 pt-2">
-                <button onClick={confirmAddRow} className="bg-blue-600 text-white px-4 py-2 rounded">
-                  Save
-                </button>
-                <button onClick={() => setShowPopup(false)} className="bg-gray-300 px-4 py-2 rounded">
-                  Cancel
-                </button>
-              </div>
+      <div className="overflow-x-auto">
+        <table className="w-full bg-white rounded shadow text-sm">
+          <thead className="bg-gray-200">
+            <tr>
+              <th className="p-2">Actions</th>
+              <th className="p-2">Building</th>
+              <th className="p-2">Flat</th>
+              <th className="p-2">Amount</th>
+              <th className="p-2">Status</th>
+              <th className="p-2">Payment</th>
+              <th className="p-2">Timer</th>
+            </tr>
+          </thead>
+          <tbody>
+            {paginatedRows.map((row, i) => (
+              <tr key={row._id || i} className="border-t text-sm text-center">
+                <td className="p-2 align-middle flex justify-center gap-2">
+                  <Pencil size={16} className="text-blue-500 cursor-pointer" onClick={() => {
+                    setEditId(row._id);
+                    setNewEntry({
+                      building: row.building,
+                      flatNumber: row.flatNumber,
+                      amount: row.amount,
+                      deliveryStatus: row.deliveryStatus
+                    });
+                    setShowAddPopup(true);
+                  }} />
+                  <Trash2 size={16} className="text-red-500 cursor-pointer" onClick={() => handleDeleteDelivery(row._id)} />
+                </td>
+                <td className="p-2 align-middle">{row.building}</td>
+                <td className="p-2 align-middle">{row.flatNumber}</td>
+                <td className="p-2 align-middle">{formatCurrency(row.amount)}</td>
+                <td className="p-2 align-middle">
+                  <select className="border rounded px-2 py-1 bg-white" value={row.deliveryStatus} onChange={(e) => handleStatusChange(row._id, e.target.value)}>
+                    <option value="Out for Delivery">Out for Delivery</option>
+                    <option value="Delivered">Delivered</option>
+                  </select>
+                </td>
+                <td className="p-2 align-middle cursor-pointer" onClick={() => {
+                  setSelectedPaymentRow(row);
+                  setShowPaymentPopup(true);
+                }}>
+                  <span className={`text-lg ${row.paymentStatus === "Paid" ? "text-green-500" : "text-red-500"}`}>●</span> {row.paymentStatus}
+                </td>
+                <td className="p-2 align-middle">
+                  <div className="min-h-[40px]">
+                    <DeliveryTimer status={row.deliveryStatus} deliveryTime={row.deliveryTime || row.createdAt} />
+                    <div className="text-xs text-gray-500">{formatTime(row.deliveryTime || row.createdAt)}</div>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="flex justify-center items-center gap-4 mt-4">
+        <button disabled={currentPage === 1} className="bg-gray-300 text-gray-800 px-4 py-1 rounded disabled:opacity-50" onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}>
+          Prev
+        </button>
+        <span>Page {currentPage} of {totalPages}</span>
+        <button disabled={currentPage === totalPages} className="bg-gray-300 text-gray-800 px-4 py-1 rounded disabled:opacity-50" onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}>
+          Next
+        </button>
+      </div>
+
+      {/* Add Popup */}
+      {showAddPopup && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 flex justify-center items-center z-50">
+          <div className="bg-white p-6 rounded shadow-lg w-[300px]">
+            <h2 className="text-lg font-semibold mb-4">{editId ? "Edit" : "Add"} Delivery</h2>
+            <select className="w-full mb-3 p-2 border rounded" value={newEntry.building} onChange={(e) => setNewEntry({ ...newEntry, building: e.target.value, flatNumber: "" })}>
+              {buildingOptions.filter((b) => b !== "All").map((b) => <option key={b}>{b}</option>)}
+            </select>
+            <select className="w-full mb-3 p-2 border rounded" value={newEntry.flatNumber} onChange={(e) => setNewEntry({ ...newEntry, flatNumber: e.target.value })}>
+              <option value="">Select Flat</option>
+              {(flatNumbersMap[newEntry.building] || []).map((flat) => <option key={flat}>{flat}</option>)}
+            </select>
+            <input type="number" className="w-full mb-3 p-2 border rounded" placeholder="Amount" value={newEntry.amount} onChange={(e) => setNewEntry({ ...newEntry, amount: e.target.value })} />
+            <div className="flex justify-end gap-2">
+              <button className="px-4 py-1 bg-gray-300 rounded" onClick={() => { setShowAddPopup(false); setEditId(null); }}>Cancel</button>
+              <button className="px-4 py-1 bg-blue-600 text-white rounded" onClick={handleAddDelivery}>Save</button>
             </div>
           </div>
         </div>
       )}
 
-      {confirmPaymentIndex !== null && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 px-2">
-          <div className="bg-white p-4 sm:p-6 rounded shadow-md max-w-sm w-full text-center">
-            <p className="font-semibold mb-4">Mark Payment Status</p>
-            <div className="flex justify-center gap-4 mb-4">
-              <label className="flex items-center gap-2">
-                <input type="radio" value="Paid" checked={paymentSelection === "Paid"} onChange={() => setPaymentSelection("Paid")} />
-                Paid
+      {/* Payment Popup */}
+      {showPaymentPopup && selectedPaymentRow && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded shadow-lg w-[300px]">
+            <h2 className="text-lg font-bold mb-4">Update Payment</h2>
+            {["Unpaid", "Paid"].map((status) => (
+              <label key={status} className="block mb-2">
+                <input type="radio" name="payment" value={status} checked={selectedPaymentRow.paymentStatus === status} onChange={() => updatePaymentStatus(selectedPaymentRow._id, status)} className="mr-2" />
+                {status}
               </label>
-              <label className="flex items-center gap-2">
-                <input type="radio" value="Unpaid" checked={paymentSelection === "Unpaid"} onChange={() => setPaymentSelection("Unpaid")} />
-                Unpaid
-              </label>
-            </div>
-            <div className="flex justify-center gap-4">
-              <button onClick={confirmPaymentStatus} className="bg-blue-600 text-white px-4 py-2 rounded">
-                Confirm
-              </button>
-              <button onClick={() => setConfirmPaymentIndex(null)} className="bg-gray-300 px-4 py-2 rounded">
-                Cancel
-              </button>
+            ))}
+            <div className="flex justify-end">
+              <button className="mt-4 bg-gray-300 px-4 py-1 rounded" onClick={() => setShowPaymentPopup(false)}>Close</button>
             </div>
           </div>
         </div>
       )}
     </div>
   );
-}
+};
 
 export default App;
